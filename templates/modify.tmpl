@@ -1,0 +1,317 @@
+<html lang="ko">
+<head>
+    <script src="/js/jquery.3.6.0.js"></script>   
+    <script>
+        $(document).ready(function(){
+            if (getItemWithExpireTime('Token') === null) {
+                location.href="/login"
+                return;
+            }
+
+            fetch('/usr/get', {
+                method: 'GET',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/json;charset=UTF-8;',
+                    'Token': getItemWithExpireTime('Token'),
+                },
+            })
+            .then((response) => response.json())
+            .then((result) => {
+                $("span[name='userid']").text(result.UserId);
+                $("input[name='username']").val(result.UserName);
+                $("input[name='hp'], input[name='hp_old']").val(result.Hp);
+                $("input[name='email'], input[name='email_old']").val(result.Email);
+                $("input[name='nickname'], input[name='nickname_old']").val(result.Nickname);
+                console.log('성공:', result);
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        });
+        function setItemWithExpireTime(keyName, keyValue, tts) {  
+            // localStorage에 저장할 객체  
+            const obj = {   
+                 value : keyValue, 
+                 expire : Date.now() + tts  
+            }   
+            // 객체를 JSON 문자열로 변환  
+            const objString = JSON.stringify(obj);   
+            // setItem
+            window.localStorage.setItem(keyName, objString);
+        }
+        function getItemWithExpireTime(keyName) {    
+            // localStorage 값 읽기 (문자열)  
+            const objString = window.localStorage.getItem(keyName);    
+            // null 체크  
+            if (!objString) {   
+                return null;  
+            }  
+            // 문자열을 객체로 변환  
+            const obj = JSON.parse(objString);
+            // 현재 시간과 localStorage의 expire 시간 비교  
+            if(Date.now() > obj.expire) {    
+                // 만료시간이 지난 item 삭제    
+                window.localStorage.removeItem(keyName);
+                // null 리턴
+                return null;
+            }    
+            // 만료기간이 남아있는 경우, value 값 리턴
+            return obj.value;
+        }
+
+        function dupNick() {
+            let val = $("input[name='nickname']").val();
+            dup('Nickname',val)    
+        }
+        function dupEmail() {
+            let val = $("input[name='email']").val();
+            dup('Email',val)    
+        }
+        function dup(typ,val) {
+            fetch("/usr/dup/" + typ + "/" + val, {
+                method: 'GET',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8;'
+                },
+            })
+            .then((response) => {
+                return response.json();
+            })
+            .then((result) => {
+                if (result.code === 409) {
+                    alert(result.message);
+                    $("input[name='" + typ.toLowerCase() + "_confirm_yn']").val("") 
+                } else if (result.code === 200) {
+                    alert("중복확인 완료");
+                    $("input[name='" + typ.toLowerCase() + "_old']").val($("input[name='" + typ.toLowerCase() + "']").val());    
+                    $("input[name='" + typ.toLowerCase() + "_confirm_yn']").val("Y")    
+                }
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        }
+        function req(){
+           
+            if ($("input[name='hp']").val() === ""){
+                alert("휴대폰 번호를 입력해주세요");
+                return;
+            }
+            let regPhone = /^01([0|1|6|7|8|9])([0-9]{3,4})([0-9]{4})$/;
+            if (regPhone.test($("input[name='hp']").val()) === false) {
+                alert('휴대폰 번호를 입력해주세요');
+                return;
+            }
+            $("input[name='hp_confirm_yn']").val("");    
+
+            fetch('/usr/auth/phone/req', {
+                method: 'POST',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8;'
+                },
+                body: new URLSearchParams({
+                    // 변경된 패스워드 정보를 보낸다.
+                    hp:$("input[name='hp']").val(),
+                    userid:$("span[name='userid']").text(),
+                }),
+            })
+            .then((response) => response.json())
+            .then((result) => {
+                $("input[name='trankey']").val(result.tranKey)
+                $("span[name='reqnum']").text(result.num)
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        }
+        function confirm(){
+            fetch('/usr/auth/phone/conf', {
+                method: 'POST',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8;',
+                },
+                body: new URLSearchParams({
+                    // 인증번호를 보낸다.
+                    userid:$("span[name='userid']").text(),
+                    trankey:$("input[name='trankey']").val(),
+                    hp:$("input[name='hp']").val(),
+                    num:$("input[name='num']").val(),
+                }),
+            })
+            .then((response) => {
+                return response.json();
+            })
+            .then((result) => {
+                if (result.code === 200) {
+                  alert("인증번호이 완료되었습니다.");
+                  $("input[name='hp_confirm_yn']").val("Y")  
+                  $("input[name='hp_old']").val($("input[name='hp']").val());          
+                } else if (result.code === 401) {
+                  alert("인증번호가 일치하지 않습니다.");
+                  $("input[name='hp_confirm_yn']").val("")        
+                }
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        }
+        function modify(){
+            let regEmail = /^[0-9a-zA-Z]([-_\.]?[0-9a-zA-Z])*@[0-9a-zA-Z]([-_\.]?[0-9a-zA-Z])*\.[a-zA-Z]{2,3}$/;
+            let regPhone = /^01([0|1|6|7|8|9])([0-9]{3,4})([0-9]{4})$/;
+
+            if ($("input[name='username']").val() === ''){
+                alert("고객이름이 비어있습니다.")
+                return;
+            } else if ($("input[name='nickname']").val() === ''){
+                alert("닉네임 비어있습니다.");
+                return;
+            } else if ($("input[name='nickname_confirm_yn']").val() === '' || 
+                $("input[name='nickname']").val() !== $("input[name='nickname_old']").val()){
+                alert("닉네임 중복확인이 필요합니다.");
+                return;
+            } else if ($("input[name='username']").val() === ''){
+                alert("고객이름이 비어있습니다.")
+                return;
+            } else if ($("input[name='hp']").val() === ''){
+                alert("폰번호가 비어있습니다.")
+                return;
+            } else if (regPhone.test($("input[name='hp']").val()) === false) {
+                alert('입력된 값은 휴대폰 형식이 아닙니다.');
+                return;
+            } else if ($("input[name='hp_confirm_yn']").val() === '' || 
+                $("input[name='hp']").val() !== $("input[name='hp_old']").val()){
+                alert("휴대폰 중복확인이 필요합니다.");
+                return;
+            } else if ($("input[name='email']").val() === ''){
+                alert("이메일이 비어있습니다.")
+                return;
+            } else if (regEmail.test($("input[name='email']").val()) === false) {
+                alert('입력된 값은 이메일 형식이 아닙니다.');
+                return;
+            } else if ($("input[name='email_confirm_yn']").val() === '' || 
+                $("input[name='email']").val() !== $("input[name='email_old']").val()){
+                alert("이메일 중복확인이 필요합니다.");
+                return;
+            }  
+        
+            fetch('/usr/upd', {
+                method: 'PATCH',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8;',
+                    'Token' : getItemWithExpireTime('Token')
+                },
+                body: new URLSearchParams({
+                    userid: $("input[name='userid']").val(),
+                    pwd:$("input[name='pwd']").val(),
+                    username: $("input[name='username']").val(),
+                    hp: $("input[name='hp']").val(),
+                    email:$("input[name='email']").val(),
+                    nickname:$("input[name='nickname']").val(),
+                }),
+            })
+            .then((response) => {
+                let token = response.headers.get("Token");
+                setItemWithExpireTime("Token", token, 30 * 60 * 1000);
+                return response.json(); 
+            })
+            .then((result) => {
+                if (result.code === 200) {
+                    alert("수정하였습니다.");
+                }
+                console.log('성공:', result);
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        }
+        function logout(){
+            window.localStorage.removeItem("Token");
+            location.href = "/login";
+        }
+        function pwdchange(){
+            setItemWithExpireTime("UserId", $("span[name='userid']").text(), 5 * 1000);
+            // 비밀번호 변경
+            location.href='/hpconfirm?rtnurl=/pwdchange';
+        }
+
+    </script>
+    <style type="text/css">
+        table {
+            width:600px;
+            margin:0;
+            padding:0;
+            border-spacing:0;
+            border-top:1px #e0e0e0 solid;
+            border-left:1px #e0e0e0 solid;
+        }
+        table tr {
+            height:30px;
+        }
+        .subj {
+            background:#ededed;
+            width:200px;
+        }
+        table td {
+            width:400px;
+            border-bottom:1px #e0e0e0 solid;
+            border-right:1px #e0e0e0 solid;
+            padding:5px;
+        }
+        table td.btn_layer {
+            width:100%;
+        }
+    </style>    
+</head>
+<body>
+      <table>
+            <tbody>
+                <tr>
+                    <td class="subj">아이디</td>
+                    <td><span name="userid"></span></td>
+                </tr>
+                <tr>
+                    <td class="subj">이름</td>
+                    <td><input name="username"></span></td>
+                </tr>
+                <tr>
+                    <td class="subj">별명</td>
+                    <td><input name="nickname" type="text" value=""/><input type="button" name="nickname_confirm" value="중복확인" onclick="dupNick()" /></td>
+                </tr>
+                <tr>
+                    <td class="subj">휴대폰번호</td>
+                    <td><input name="hp" type="text" value="" maxlength='11' oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');"/><input type="button" name="hp_request" value="인증요청" onclick="req()"/></td>
+                </tr>
+                <tr>
+                    <td class="subj">인증번호 <span name="reqnum" style="color:#ff0000;"></span></td>
+                    <td><input name="num" type="text" value="" maxlength='6' oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');"/><input type="button" name="hp_confirm" value="인증확인" onclick="confirm()"/></td>
+                </tr>
+                <tr>
+                    <td class="subj">이메일</td>
+                    <td><input name="email" type="text" value=""/><input type="button" name="email_confirm" value="중복확인" onclick="dupEmail()" /></td>
+                </tr>
+                <tr>
+                    <td class="btn_layer" colspan="2">
+                        <input class="btn" type="button" value="수정" onclick="modify()"/>
+                        <input class="btn" type="button" value="비밀변호변경" onclick="pwdchange()"/>
+                        <input class="btn" type="button" value="로그아웃" onclick="logout()"/>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <input type="hidden" name="trankey" value="" />
+        <input type="hidden" name="nickname_confirm_yn" value="Y"/>
+        <input type="hidden" name="userid_confirm_yn" value="Y"/>
+        <input type="hidden" name="hp_confirm_yn" value="Y"/>
+        <input type="hidden" name="email_confirm_yn" value="Y"/>
+
+        <input type="hidden" name="nickname_old"/>
+        <input type="hidden" name="hp_old"/>
+        <input type="hidden" name="email_old"/>
+
+</body>    
+</html>

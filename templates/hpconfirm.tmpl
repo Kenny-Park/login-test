@@ -1,0 +1,198 @@
+<html lang="ko">
+<head>
+    <style type="text/css">
+        table {
+            width:600px;
+            margin:0;
+            padding:0;
+            border-spacing:0;
+            border-top:1px #e0e0e0 solid;
+            border-left:1px #e0e0e0 solid;
+        }
+        table tr {
+            height:30px;
+        }
+        .subj {
+            background:#ededed;
+            width:200px;
+        }
+        table td {
+            width:400px;
+            border-bottom:1px #e0e0e0 solid;
+            border-right:1px #e0e0e0 solid;
+            padding:5px;
+        }
+        table td.btn_layer {
+            width:100%;
+        }
+    </style>
+    <script src="/js/jquery.3.6.0.js"></script>   
+    <script>
+        $(document).ready(function(){
+            if(getItemWithExpireTime("UserId") === null){
+              $("input[name='userid']").val("");
+            } else {
+              $("input[name='userid']").val(getItemWithExpireTime("UserId"));   
+            }
+            if(getItemWithExpireTime("Join") === null){
+                $("input[name='join']").val(""); 
+            } else {
+                $("input[name='join']").val(getItemWithExpireTime("Join")); 
+                $("#joinflag").css("display","none");
+            }
+            window.localStorage.removeItem("Join");
+        });
+        function req(){
+            if ($("input[name='userid']").val() === '' && $("input[name='join']").val() === ''){
+                alert("아이디를 입력해주세요")
+                return;
+            } 
+            if ($("input[name='hp']").val() === ''){
+                alert("휴대폰번호를 입력해주세요")
+                return;
+            } 
+            fetch('/usr/auth/phone/req', {
+                method: 'POST',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8;'
+                },
+                body: new URLSearchParams({
+                    // 변경된 패스워드 정보를 보낸다.
+                    hp:$("input[name='hp']").val(),
+                    userid:$("input[name='userid']").val(),
+                    join:$("input[name='join']").val(),
+                }),
+            })
+            .then((response) => response.json())
+            .then((result) => {
+                if (result.code === 403) {
+                  alert("고객정보가 없습니다.");
+                  $("input[name='hp_confirm_yn']").val("")
+                  return;        
+                }
+                $("input[name='trankey']").val(result.tranKey)
+                $("span[name='reqnum']").text(result.num)
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        }
+        function setItemWithExpireTime(keyName, keyValue, tts) {  
+            // localStorage에 저장할 객체  
+            const obj = {   
+                 value : keyValue, 
+                 expire : Date.now() + tts  
+            }   
+            // 객체를 JSON 문자열로 변환  
+            const objString = JSON.stringify(obj);   
+            // setItem
+            window.localStorage.setItem(keyName, objString);
+        }
+        function getItemWithExpireTime(keyName) {    
+            // localStorage 값 읽기 (문자열)  
+            const objString = window.localStorage.getItem(keyName);    
+            // null 체크  
+            if (!objString) {   
+                return null;  
+            }  
+            // 문자열을 객체로 변환  
+            const obj = JSON.parse(objString);
+            // 현재 시간과 localStorage의 expire 시간 비교  
+            if(Date.now() > obj.expire) {    
+                // 만료시간이 지난 item 삭제    
+                window.localStorage.removeItem(keyName);
+                // null 리턴
+                return null;
+            }    
+            // 만료기간이 남아있는 경우, value 값 리턴
+            return obj.value;
+        }
+        function confirm(){
+            if ($("input[name='userid']").val() === '' && $("input[name='join']").val() === ''){
+                alert("아이디를 입력해주세요")
+                return;
+            } if ($("input[name='hp']").val() === ''){
+                alert("휴대폰번호를 입력해주세요")
+                return;
+            } if ($("input[name='num']").val() === ''){
+                alert("인증번호를 입력해주세요")
+                return;
+            }  
+            fetch('/usr/auth/phone/conf', {
+                method: 'POST',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8;',
+                    'Token': getItemWithExpireTime('Token')
+                },
+                body: new URLSearchParams({
+                    // 인증번호를 보낸다.
+                    trankey:$("input[name='trankey']").val(),
+                    userid:$("input[name='userid']").val(),
+                    hp:$("input[name='hp']").val(),
+                    num:$("input[name='num']").val(),
+                    join:$("input[name='join']").val(),
+                }),
+            })
+            .then((response) => {
+                let token = response.headers.get("Token");
+                let certCompleted = response.headers.get("CertCompleted");
+                // 로컬스토리지에 저장
+                setItemWithExpireTime("Token", token, 30 * 60 * 1000);
+                // 인증확인 정보삽입
+                setItemWithExpireTime("CertCompleted", certCompleted, 5 * 1000);
+                return response.json();
+            })
+            .then((result) => {
+                if (result.code === 200) {
+                  alert("인증번호이 완료되었습니다.");
+                  $("input[name='hp_confirm_yn']").val("Y");
+                  setItemWithExpireTime("HpNum",  $("input[name='hp']").val(), 5 * 1000);
+                  // 리턴URL로 이동.
+                  location.href=$("input[name='rtnurl']").val();  
+                } else if (result.code === 401) {
+                  alert("인증번호가 일치하지 않습니다.");
+                  $("input[name='hp_confirm_yn']").val("")        
+                } else if (result.code === 403) {
+                  alert("고객정보가 없습니다.");
+                  $("input[name='hp_confirm_yn']").val("")        
+                }
+                
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        }
+        function cancel(){
+            location.href = "/login";
+        }
+    </script>
+</head>
+<body>
+    <input type="hidden" name="rtnurl" value="{{ .rtnUrl }}" />
+    <input type="hidden" name="trankey" value="" />
+    <input type="hidden" name="join" value="" />
+    <table>
+        <tbody>
+                <tr id="joinflag">
+                    <td class="subj">아이디</td>
+                    <td><input name="userid" type="text" value=""/>
+                </tr>
+                <tr>
+                    <td class="subj">휴대폰번호</td>
+                    <td><input name="hp" type="text" value=""  maxlength='11' oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');"/> <input type="button" value="인증요청" onclick="req()"/></td>
+                </tr>
+                <tr>
+                    <td class="subj">인증번호 <span name="reqnum" style="color:#ff0000;"></span></td>
+                    <td><input name="num" type="text" value="" maxlength='6' oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');"/> <input type="button" value="인증확인" onclick="confirm()"/></td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <input type="button" value="취소" onclick="cancel();"/>
+                    </td>
+                </tr>
+        </tbody>
+    </table>
+</body>    
+</html>

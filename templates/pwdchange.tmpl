@@ -1,0 +1,138 @@
+<html lang="ko">
+<head>
+    <style type="text/css">
+        table {
+            width:600px;
+            margin:0;
+            padding:0;
+            border-spacing:0;
+            border-top:1px #e0e0e0 solid;
+            border-left:1px #e0e0e0 solid;
+        }
+        table tr {
+            height:30px;
+        }
+        .subj {
+            background:#ededed;
+            width:200px;
+        }
+        table td {
+            width:400px;
+            border-bottom:1px #e0e0e0 solid;
+            border-right:1px #e0e0e0 solid;
+            padding:5px;
+        }
+        table td.btn_layer {
+            width:100%;
+        }
+    </style>  
+    <script src="/js/jquery.3.6.0.js"></script>   
+    <script>
+        $(document).ready(function(){
+            if(getItemWithExpireTime("CertCompleted") === null){
+                alert("잘못된 접근입니다.");
+                location.href = "/login"
+            }
+            window.localStorage.removeItem("CertCompleted");
+        });
+        function getItemWithExpireTime(keyName) {    
+            // localStorage 값 읽기 (문자열)  
+            const objString = window.localStorage.getItem(keyName);    
+            // null 체크  
+            if (!objString) {   
+                return null;  
+            }  
+            // 문자열을 객체로 변환  
+            const obj = JSON.parse(objString);
+            // 현재 시간과 localStorage의 expire 시간 비교  
+            if(Date.now() > obj.expire) {    
+                // 만료시간이 지난 item 삭제    
+                window.localStorage.removeItem(keyName);
+                // null 리턴
+                return null;
+            }    
+            // 만료기간이 남아있는 경우, value 값 리턴
+            return obj.value;
+        }
+        function setItemWithExpireTime(keyName, keyValue, tts) {  
+            // localStorage에 저장할 객체  
+            const obj = {   
+                 value : keyValue, 
+                 expire : Date.now() + tts  
+            }   
+            // 객체를 JSON 문자열로 변환  
+            const objString = JSON.stringify(obj);   
+            // setItem
+            window.localStorage.setItem(keyName, objString);
+        }
+        function pwdchange(){
+             if ($("input[name='pwd']").val() === ''){
+                alert("비밀번호를 입력해주세요")
+                return;
+            } else if ($("input[name='pwd_confirm']").val() === ''){
+                alert("비밀번호 확인을 입력해주세요")
+                return;
+            } else if ($("input[name='pwd']").val() !== $("input[name='pwd_confirm']").val()){
+                alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.")
+                return;
+            } 
+            fetch('usr/upd/pwd', {
+                method: 'PATCH',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8;',
+                    // 서버로부터 발급받은 임시토큰 또는 정상발급 토큰을 보낸다.
+                    'Token': getItemWithExpireTime("Token"),
+                },
+                body: new URLSearchParams({
+                    // 변경된 패스워드 정보를 보낸다.
+                    pwd:$("input[name='pwd']").val(),
+                }),
+            })
+            .then((response) => {
+                    // 아이디 비밀번호 찾기
+                    if (response.headers.get("Rtntype") === "1") {
+                        location.href = "/login"
+                    // 비밀번호 변경    
+                    } else if (response.headers.get("Rtntype") === "2") {
+                        let token = response.headers.get("Token");
+                        setItemWithExpireTime("Token", token, 30 * 60 * 1000);
+                        location.href = "/get"
+                    }
+                    return response.json();
+                }
+            )
+            .then((result) => {
+                
+                console.log('성공:', result);
+            })
+            .catch((error) => {
+                console.error('실패:', error);
+            });
+        }
+        function cancel(){
+            location.href = "/login";
+        }
+    </script>
+</head>
+<body>
+    <table>
+        <tbody>
+            <tr>
+                <td class="subj">비밀번호</td>
+                <td><input name="pwd" type="password" value=""/></td>
+            </tr>
+            <tr>
+                <td class="subj">비밀번호확인</td>
+                <td><input name="pwd_confirm" type="password" value=""/></td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <input type="button" value="등록" onclick="pwdchange()"/>
+                    <input type="button" value="취소" onclick="cancel()"/>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</body>    
+</html>
